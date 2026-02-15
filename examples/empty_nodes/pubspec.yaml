@@ -1,0 +1,23 @@
+name: empty_nodes
+description: Minimal example showing only nodes, fields and a context menu
+publish_to: none
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  fl_nodes:
+    path: ../../packages/fl_nodes
+
+# Use local packages from the monorepo for development
+dependency_overrides:
+  fl_nodes_core:
+    path: ../../packages/fl_nodes_core
+
+flutter:
+  uses-material-design: true
+  generate: true
+  shaders:
+    - packages/fl_nodes_core/shaders/grid.frag

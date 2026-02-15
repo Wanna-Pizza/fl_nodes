@@ -63,7 +63,7 @@ class FlNodesShortcutsWidget extends StatelessWidget {
         const SingleActivator(LogicalKeyboardKey.keyY, control: true): () =>
             controller.history.redo(),
       },
-      child: Focus(autofocus: true, child: child),
+      child: Focus(autofocus: false, child: child),
     );
   }
 }

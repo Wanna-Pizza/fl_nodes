@@ -209,11 +209,171 @@ class FlNodesClipboardHelper {
       controller.addNodeFromExisting(node, isHandled: true);
     }
 
+    // Select the newly created nodes
+    final newIdsSet = deepCopiedNodes.map((n) => n.id).toSet();
+    controller.selectNodesById(newIdsSet, isHandled: true);
+
     eventBus.emit(
       FlPasteSelectionEvent(
         id: const Uuid().v4(),
         position,
         clipboardData.text!,
+      ),
+    );
+  }
+
+  /// Duplicates the current selection and places the copy at the given
+  /// screen position (converted to world coordinates). If [screenPosition]
+  /// is null the nodes are pasted centered (same as pasteSelection).
+  Future<void> duplicateSelection({
+    Offset? screenPosition,
+    BuildContext? context,
+  }) async {
+    final strings = FlNodesLocalizations.of(context);
+
+    final base64Data = await copySelection(context: context);
+    if (base64Data.isEmpty) return;
+
+    late List<dynamic> nodesJson;
+    late Rect encompassingRect;
+
+    try {
+      final base64 = utf8.decode(base64Decode(base64Data));
+      final jsonData = jsonDecode(base64) as Map<String, dynamic>;
+
+      nodesJson = jsonDecode(jsonData['nodes']) as List<dynamic>;
+      encompassingRect = JSONRect.fromJson(
+        jsonDecode(jsonData['encompassingRect']),
+      );
+    } catch (e) {
+      controller.onCallback?.call(
+        FlCallbackType.error,
+        strings.failedToPasteSelectionErrorMsg(e.toString()),
+      );
+      return;
+    }
+
+    Offset position;
+
+    if (screenPosition != null) {
+      final world = RenderBoxUtils.screenToWorld(
+        editorKey,
+        screenPosition,
+        viewportOffset,
+        viewportZoom,
+      );
+      if (world != null) {
+        position = world;
+      } else {
+        final viewportSize = RenderBoxUtils.getSizeFromGlobalKey(editorKey)!;
+        position = Rect.fromLTWH(
+          -viewportOffset.dx -
+              (viewportSize.width / 2) -
+              (encompassingRect.width / 2),
+          -viewportOffset.dy -
+              (viewportSize.height / 2) -
+              (encompassingRect.height / 2),
+          viewportSize.width,
+          viewportSize.height,
+        ).center;
+      }
+    } else {
+      final viewportSize = RenderBoxUtils.getSizeFromGlobalKey(editorKey)!;
+
+      position = Rect.fromLTWH(
+        -viewportOffset.dx -
+            (viewportSize.width / 2) -
+            (encompassingRect.width / 2),
+        -viewportOffset.dy -
+            (viewportSize.height / 2) -
+            (encompassingRect.height / 2),
+        viewportSize.width,
+        viewportSize.height,
+      ).center;
+    }
+
+    // Create instances from the JSON data.
+    final instances = nodesJson.map((node) {
+      return FlNodeDataModel.fromJson(
+        node,
+        nodePrototypes: controller.nodePrototypes,
+        dataHandlers: controller.project.dataHandlers,
+      );
+    }).toList();
+
+    final newIds = await FlNodesUtils.mapToNewIds(instances);
+
+    // Keep duplicates initially at the same world offsets as the originals
+    final Map<String, Offset> originalOffsets = {
+      for (final inst in instances)
+        inst.id: controller.nodes[inst.id] != null
+            ? controller.nodes[inst.id]!.offset
+            : inst.offset + position,
+    };
+
+    final deepCopiedNodes = instances.map((instance) {
+      return instance.copyWith(
+        id: newIds[instance.id],
+        offset: originalOffsets[instance.id]!,
+        fields: instance.fields,
+        ports: instance.ports.map((key, port) {
+          return MapEntry(
+            port.prototype.idName,
+            port.copyWith(
+              links: port.links.map((link) {
+                return link.copyWith(
+                  state: FlLinkState(),
+                  id: newIds[link.id],
+                  ports: (
+                    (
+                      nodeId: newIds[link.ports.$1.nodeId]!,
+                      portId: link.ports.$1.portId,
+                    ),
+                    (
+                      nodeId: newIds[link.ports.$2.nodeId]!,
+                      portId: link.ports.$2.portId,
+                    ),
+                  ),
+                );
+              }).toSet(),
+            ),
+          );
+        }),
+      );
+    }).toList();
+
+    for (final node in deepCopiedNodes) {
+      controller.addNodeFromExisting(node, isHandled: true);
+    }
+
+    // Select the newly created nodes and initialise their unbound offsets
+    final newIdsSet = deepCopiedNodes.map((n) => n.id).toSet();
+    for (final id in newIdsSet) {
+      controller.unboundNodeOffsets[id] = controller.nodes[id]!.offset;
+    }
+    controller.selectNodesById(newIdsSet, isHandled: true);
+
+    // If duplication was triggered with a screen position, start a
+    // keyboard drag so the duplicated nodes follow the cursor. Use the
+    // world point computed from the original screen position to avoid
+    // small discrepancies that can cause an immediate jump.
+    if (screenPosition != null) {
+      final worldForDrag = RenderBoxUtils.screenToWorld(
+        editorKey,
+        screenPosition,
+        viewportOffset,
+        viewportZoom,
+      );
+      if (worldForDrag != null) {
+        controller.startKeyboardDrag(newIdsSet, worldForDrag);
+      }
+    }
+
+    eventBus.emit(
+      FlPasteSelectionEvent(
+        id: const Uuid().v4(),
+        position,
+        base64Data,
       ),
     );
   }

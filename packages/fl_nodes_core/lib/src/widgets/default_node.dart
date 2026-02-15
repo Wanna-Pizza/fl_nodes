@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../core/controller/core.dart';
 import '../core/events/events.dart';
 import '../core/models/data.dart';
-
 import 'base_node.dart';
 
 /// The main NodeWidget which represents a node in the editor.
@@ -260,7 +259,10 @@ class _FieldWidget extends StatelessWidget {
         return Stack(
           children: [
             GestureDetector(
-              onTap: () => overlayEntry?.remove(),
+              onTap: () {
+                overlayEntry?.remove();
+                FocusManager.instance.primaryFocus?.unfocus();
+              },
               child: Container(color: Colors.transparent),
             ),
             Positioned(
@@ -269,7 +271,10 @@ class _FieldWidget extends StatelessWidget {
               child: Material(
                 child: field.prototype.editorBuilder!(
                   context,
-                  () => overlayEntry?.remove(),
+                  () {
+                    overlayEntry?.remove();
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  },
                   field.data,
                   (dynamic data, {required FlFieldEventType eventType}) {
                     controller.setFieldData(

@@ -21,6 +21,7 @@ import '../core/events/events.dart';
 import '../core/models/data.dart';
 import '../core/models/paint.dart';
 import '../core/utils/rendering/paths.dart';
+import '../core/utils/rendering/renderbox.dart';
 import '../styles/styles.dart';
 import 'builders.dart';
 
@@ -1113,6 +1114,12 @@ class NodeEditorRenderBox extends RenderBox
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
     super.handleEvent(event, entry);
 
+    // Record last pointer screen position on pointer events so keyboard
+    // actions (duplicate/paste) can place nodes under the mouse.
+    if (event is PointerHoverEvent || event is PointerDownEvent) {
+      _controller.lastPointerScreenPosition = event.position;
+    }
+
     final Offset centeredPosition =
         event.localPosition - Offset(size.width / 2, size.height / 2);
     final Offset scaledPosition = centeredPosition.scale(1 / _zoom, 1 / _zoom);
@@ -1121,6 +1128,26 @@ class NodeEditorRenderBox extends RenderBox
     // Ignore middle mouse button events
     if (event is PointerDownEvent && event.buttons == kMiddleMouseButton ||
         _controller.tempLink != null) {
+      return;
+    }
+
+    // If a keyboard-initiated drag is active, handle hover deltas to move selection
+    if (event is PointerHoverEvent && _controller.keyboardDragActive) {
+      final world = RenderBoxUtils.screenToWorld(
+        _controller.editorKey,
+        event.position,
+        _controller.viewportOffset,
+        _controller.viewportZoom,
+      );
+      if (world != null) {
+        _controller.updateKeyboardDrag(world);
+      }
+      return;
+    }
+
+    // If a keyboard drag is active and we receive a pointer down, end the drag
+    if (event is PointerDownEvent && _controller.keyboardDragActive) {
+      _controller.endKeyboardDrag();
       return;
     }
 

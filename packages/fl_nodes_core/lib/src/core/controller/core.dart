@@ -34,7 +34,52 @@ export '../models/config.dart';
 class FlNodesController with ChangeNotifier {
   final FlCallback? onCallback;
   final GlobalKey editorKey;
+  Offset? lastPointerScreenPosition;
   final String appVersion;
+  bool _keyboardDragActive = false;
+  Offset? _keyboardDragPrevWorld;
+
+  bool get keyboardDragActive => _keyboardDragActive;
+
+  /// Start a keyboard-initiated drag for the provided node ids. The [worldPosition]
+  /// is the initial world coordinate under the mouse.
+  void startKeyboardDrag(Set<String> nodeIds, Offset worldPosition) {
+    selectNodesById(nodeIds);
+    _keyboardDragActive = true;
+    _keyboardDragPrevWorld = worldPosition;
+
+    eventBus.emit(
+      FlDragSelectionStartEvent(
+        nodeIds,
+        worldPosition,
+        id: const Uuid().v4(),
+      ),
+    );
+  }
+
+  /// End the keyboard-initiated drag.
+  void endKeyboardDrag() {
+    if (!_keyboardDragActive) return;
+    _keyboardDragActive = false;
+    final pos = _keyboardDragPrevWorld ?? Offset.zero;
+    _keyboardDragPrevWorld = null;
+    eventBus.emit(
+      FlDragSelectionEndEvent(
+        pos,
+        selectedNodeIds.toSet(),
+        id: const Uuid().v4(),
+      ),
+    );
+  }
+
+  /// Update the keyboard drag with the current world pointer position.
+  /// This applies the delta since the last update to the selected nodes.
+  void updateKeyboardDrag(Offset worldPosition) {
+    if (!_keyboardDragActive || _keyboardDragPrevWorld == null) return;
+    final delta = worldPosition - _keyboardDragPrevWorld!;
+    _keyboardDragPrevWorld = worldPosition;
+    dragSelection(delta, isWorldDelta: true);
+  }
 
   FlNodesController({
     required this.appVersion,
@@ -184,9 +229,9 @@ class FlNodesController with ChangeNotifier {
 
             eventBus.emit(
               FlViewportOffsetEvent(
-                id: const Uuid().v4(),
                 _viewportOffsetAnim.value,
                 animate: animate,
+                id: const Uuid().v4(),
                 isHandled: isHandled,
               ),
             );
@@ -199,9 +244,9 @@ class FlNodesController with ChangeNotifier {
 
       eventBus.emit(
         FlViewportOffsetEvent(
-          id: const Uuid().v4(),
           endOffset,
           animate: animate,
+          id: const Uuid().v4(),
           isHandled: isHandled,
         ),
       );
@@ -250,9 +295,9 @@ class FlNodesController with ChangeNotifier {
 
             eventBus.emit(
               FlViewportZoomEvent(
-                id: const Uuid().v4(),
                 _viewportZoomAnim.value,
                 animate: animate,
+                id: const Uuid().v4(),
                 isHandled: isHandled,
               ),
             );
@@ -266,9 +311,9 @@ class FlNodesController with ChangeNotifier {
 
       eventBus.emit(
         FlViewportZoomEvent(
-          id: const Uuid().v4(),
           endZoom,
           animate: animate,
+          id: const Uuid().v4(),
           isHandled: isHandled,
         ),
       );
@@ -526,7 +571,7 @@ class FlNodesController with ChangeNotifier {
     nodesDataDirty = true;
 
     eventBus.emit(
-      FlAddNodeEvent(id: const Uuid().v4(), instance),
+      FlAddNodeEvent(instance, id: const Uuid().v4()),
     );
 
     return instance;
@@ -564,8 +609,8 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlAddNodeEvent(
-        id: eventId ?? const Uuid().v4(),
         node,
+        id: eventId ?? const Uuid().v4(),
         isHandled: isHandled,
       ),
     );
@@ -606,8 +651,8 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlRemoveNodeEvent(
-        id: eventId ?? const Uuid().v4(),
         node,
+        id: eventId ?? const Uuid().v4(),
         isHandled: isHandled,
       ),
     );
@@ -689,7 +734,7 @@ class FlNodesController with ChangeNotifier {
     linksDataDirty = true;
 
     eventBus.emit(
-      FlAddLinkEvent(id: eventId ?? const Uuid().v4(), link),
+      FlAddLinkEvent(link, id: eventId ?? const Uuid().v4()),
     );
 
     return link;
@@ -736,8 +781,8 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlAddLinkEvent(
-        id: eventId ?? const Uuid().v4(),
         link,
+        id: eventId ?? const Uuid().v4(),
         isHandled: isHandled,
       ),
     );
@@ -770,8 +815,8 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlRemoveLinkEvent(
-        id: eventId ?? const Uuid().v4(),
         link,
+        id: eventId ?? const Uuid().v4(),
         isHandled: isHandled,
       ),
     );
@@ -801,9 +846,9 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlDrawTempLinkEvent(
-        id: const Uuid().v4(),
         startOffset,
         endOffset,
+        id: const Uuid().v4(),
       ),
     );
   }
@@ -817,7 +862,7 @@ class FlNodesController with ChangeNotifier {
     // The temp link is treated differently from regular links, so we don't need to mark the links data as dirty.
 
     eventBus.emit(
-      FlDrawTempLinkEvent(id: const Uuid().v4(), Offset.zero, Offset.zero),
+      FlDrawTempLinkEvent(Offset.zero, Offset.zero, id: const Uuid().v4()),
     );
   }
 
@@ -911,10 +956,10 @@ class FlNodesController with ChangeNotifier {
 
     eventBus.emit(
       FlNodeFieldEvent(
-        id: const Uuid().v4(),
         nodeId,
         data,
         eventType,
+        id: const Uuid().v4(),
       ),
     );
   }
@@ -932,7 +977,7 @@ class FlNodesController with ChangeNotifier {
     nodesDataDirty = true;
 
     eventBus.emit(
-      FlCollapseNodeEvent(id: const Uuid().v4(), collapse, selectedNodeIds),
+      FlCollapseNodeEvent(collapse, selectedNodeIds, id: const Uuid().v4()),
     );
   }
 
